@@ -9,7 +9,7 @@ const database = {
 };
 
 const grepolis = {
-    fetchLink: "https://pl84.grepolis.com/game/alliance_forum?town_id=16422&action=forum&h=40597ed6f84a5be633c7d94723328bc605937c67",
+    fetchLink: "https://pl84.grepolis.com/game/alliance_forum?town_id=16422&action=forum&h=ba0d3505d59872152c2fe1cc4f988013de34a88b",
     html: null,
     // data: {
     //     // "type": "go",
@@ -23,7 +23,7 @@ const grepolis = {
         const res = await fetch(grepolis.fetchLink, {
             // "credentials": "include",
             "headers": {
-                "cookie": "sid=8s88s00oswos0gkk4g00gc8k0cww8k0cgw4cs0gk8g08cwsckwc8w8ksk804kgs0",
+                "cookie": "sid=o4kk484wcc44c4g8w00g0k0c884cck04wss04os4ww4owc8o88c0o88g8gkgk4ss",
                 // "accept": "text/plain, */*; q=0.01",
                 // "accept-language": "en-US,en;q=0.9",
                 "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
@@ -39,7 +39,12 @@ const grepolis = {
         });
         const json = await res.json();
         // console.log(json);
-        grepolis.html = json.plain.html;
+        try {
+            grepolis.html = json.plain.html;
+        } catch {
+            console.error(json);
+            process.exit(1);
+        }
     },
 
     saveToFile: (filename) => {
@@ -75,12 +80,15 @@ const grepolis = {
             // const activeBookmarkId = $('select[name="forum[forum_id]"] > option[selected="selected"]').attr('value');
             const bookmarkId = bookmark['forumId'];
             const threads = [];
-            await $('.title_author_wrapper > .title > a').each((index, element) => {
+            await $('.title_author_wrapper > .title > a').each(async (index, element) => {
                 const threadTitle = $(element).text();
                 const threadId = $(element).attr('onclick').match('[0-9]+')[0];
+                await grepolis.fetch({thread_id: threadId});
+                const posts = await grepolis.parseForumPosts();
                 threads.push({
                     threadId,
                     threadTitle,
+                    posts,
                 })
             });
             database.bookmarkThreads.push({ bookmarkId, bookmarkTitle, threads });
@@ -99,12 +107,12 @@ const grepolis = {
             if(lastEdited !== null) lastEdited = lastEdited[0];
             posts.push({date, lastEdited, author, postText});
         });
-        console.log(posts);
+        return posts;
     }
 };
 
 (async () => {
-    await grepolis.fetch({forum_id: 1687}).catch(err => { console.error('No data returned', err); process.exit()});
+    await grepolis.fetch({forum_id: 1687}).catch(err => { console.error(err); process.exit(1)});
     // await grepolis.saveToFile('file2.html');
     await grepolis.parseBookmarks();
     console.log(database.bookmarks);
