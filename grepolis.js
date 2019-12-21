@@ -9,7 +9,7 @@ const database = {
 };
 
 const grepolis = {
-    fetchLink: "https://pl84.grepolis.com/game/alliance_forum?town_id=16422&action=forum&h=ba0d3505d59872152c2fe1cc4f988013de34a88b",
+    fetchLink: "https://pl84.grepolis.com/game/alliance_forum?town_id=16422&action=forum&h=2f71ab6273b617319a63c213ad5b781a8de1bbfb",
     html: null,
     // data: {
     //     // "type": "go",
@@ -23,7 +23,7 @@ const grepolis = {
         const res = await fetch(grepolis.fetchLink, {
             // "credentials": "include",
             "headers": {
-                "cookie": "sid=o4kk484wcc44c4g8w00g0k0c884cck04wss04os4ww4owc8o88c0o88g8gkgk4ss",
+                "cookie": "sid=sogcc8gck8k048cgs4cc84s0wg8gwwgkkkg0ccwg0kww00owkoc0g08kgsks0sg4",
                 // "accept": "text/plain, */*; q=0.01",
                 // "accept-language": "en-US,en;q=0.9",
                 "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
@@ -80,7 +80,8 @@ const grepolis = {
             // const activeBookmarkId = $('select[name="forum[forum_id]"] > option[selected="selected"]').attr('value');
             const bookmarkId = bookmark['forumId'];
             const threads = [];
-            await $('.title_author_wrapper > .title > a').each(async (index, element) => {
+            const postsArray = await $('.title_author_wrapper > .title > a').toArray();
+            for(let element of postsArray) {
                 const threadTitle = $(element).text();
                 const threadId = $(element).attr('onclick').match('[0-9]+')[0];
                 await grepolis.fetch({thread_id: threadId});
@@ -90,10 +91,9 @@ const grepolis = {
                     threadTitle,
                     posts,
                 })
-            });
+            }
             database.bookmarkThreads.push({ bookmarkId, bookmarkTitle, threads });
         }
-        console.log(JSON.stringify(database.bookmarkThreads, null, 2));
     },
 
     parseForumPosts: async () => {
@@ -113,10 +113,9 @@ const grepolis = {
 
 (async () => {
     await grepolis.fetch({forum_id: 1687}).catch(err => { console.error(err); process.exit(1)});
-    // await grepolis.saveToFile('file2.html');
     await grepolis.parseBookmarks();
     console.log(database.bookmarks);
     await grepolis.parseForumThreads();
-    // await grepolis.parseForumPosts();
+    console.log(JSON.stringify(database.bookmarkThreads, null, 2));
 })();
 
