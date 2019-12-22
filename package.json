@@ -4,14 +4,16 @@
   "description": "",
   "main": "grepolis.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node grepolis.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "cheerio": "^1.0.0-rc.3",
-    "node-fetch": "^2.6.0"
+    "node-fetch": "^2.6.0",
+    "prompt-sync": "^4.2.0",
+    "puppeteer-core": "^2.0.0"
   },
   "devDependencies": {
     "@types/node-fetch": "^2.5.4"

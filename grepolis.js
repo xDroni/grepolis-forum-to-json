@@ -1,6 +1,10 @@
-const fetch = require('node-fetch');
+const puppeteer = require('puppeteer-core');
 const cheerio = require('cheerio');
+const fetch = require('node-fetch');
 const fs = require('fs');
+const prompt = require('prompt-sync')();
+
+const BASE_URL = 'https://pl.grepolis.com/';
 
 const database = {
     bookmarks: null,
@@ -9,36 +13,74 @@ const database = {
 };
 
 const grepolis = {
-    fetchLink: "https://pl84.grepolis.com/game/alliance_forum?town_id=16422&action=forum&h=2f71ab6273b617319a63c213ad5b781a8de1bbfb",
+    browser: null,
+    page: null,
     html: null,
-    // data: {
-    //     // "type": "go",
-    //     // "separate": "false",
-    //     "forum_id": "1688",
-    //     // "thread_id": "6471",
-    //     "page": "1",
-    //     // "nl_init": "true"
-    // },
+    fetchLink: "https://pl84.grepolis.com/game/alliance_forum?town_id=16422&action=forum&h=2f71ab6273b617319a63c213ad5b781a8de1bbfb",
+    sid: null,
+
+    initialize: async () => {
+        grepolis.browser = await puppeteer.launch({
+            headless: false,
+            executablePath: 'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+        });
+
+        grepolis.page = await grepolis.browser.newPage();
+    },
+
+    login: async (login, password) => {
+        await grepolis.page.goto(BASE_URL, { waitUntil: 'networkidle2' });
+
+        /* Logging in */
+        await grepolis.page.waitFor('input[id="login_userid"]');
+        await grepolis.page.type('input[id="login_userid"]', login, { delay: 50 });
+        await grepolis.page.type('input[id="login_password"]', password, { delay: 50 });
+        await grepolis.page.keyboard.press('Enter');
+        console.log('Logging in...');
+
+        /* Selecting the world */
+        await grepolis.page.waitFor('a[class="logout_button"]');
+        const worlds = await grepolis.page.$$('div[id="worlds"] > div > ul > li');
+        for(let i=0; i<worlds.length-1; i++) {
+            const text = await grepolis.page.evaluate(element => element.textContent, worlds[i]);
+            console.log(i + 1, text);
+        }
+
+        let choice = -1;
+        while(!(choice >= 1 && choice <= worlds.length-1)) {
+            choice = prompt(`Choose the world [1-${worlds.length-1}]: `);
+        }
+        console.log('Your choice: ' + choice);
+
+        /* Logging in into world */
+        await worlds[choice-1].click();
+        console.log('Loading the world...');
+
+        await grepolis.page.waitFor(5000);
+
+        await grepolis.page.waitFor('.button > div[data-subtype="allianceforum"]');
+        await grepolis.page.evaluate(() => {document.querySelector('.button > div[data-subtype="allianceforum"]').click()});
+        console.log('Opening the alliance forum');
+
+        const cookies = await grepolis.page.cookies();
+        const sidCookie = cookies.find((element) => {
+            return element['name'] === 'sid';
+        });
+        grepolis.sid = sidCookie['value'];
+        console.log('grepolis.sid', grepolis.sid);
+    },
+
     fetch: async (data) => {
         const res = await fetch(grepolis.fetchLink, {
-            // "credentials": "include",
             "headers": {
                 "cookie": "sid=sogcc8gck8k048cgs4cc84s0wg8gwwgkkkg0ccwg0kww00owkoc0g08kgsks0sg4",
-                // "accept": "text/plain, */*; q=0.01",
-                // "accept-language": "en-US,en;q=0.9",
                 "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-                // "sec-fetch-mode": "cors",
-                // "sec-fetch-site": "same-origin",
                 "x-requested-with": "XMLHttpRequest"
             },
-            // "referrer": "https://pl84.grepolis.com/game/index?login=1&p=974498&ts=1576827200",
-            // "referrerPolicy": "no-referrer-when-downgrade",
             "body": "json="+JSON.stringify(data),
             "method": "POST",
-            // "mode": "cors"
         });
         const json = await res.json();
-        // console.log(json);
         try {
             grepolis.html = json.plain.html;
         } catch {
@@ -55,7 +97,6 @@ const grepolis = {
     },
 
     parseBookmarks: async () => {
-        // const test = fs.readFileSync('file2.html').toString();
         const $ = cheerio.load(grepolis.html, { normalizeWhitespace: true });
         const bookmarks = [];
         await $('select[name="forum[forum_id]"] > option').each((index, element) => {
@@ -67,17 +108,13 @@ const grepolis = {
             })
         });
         database.bookmarks = bookmarks;
-        // console.log(database.bookmarks);
     },
 
     parseForumThreads: async () => {
         for(let bookmark of database.bookmarks) {
             await grepolis.fetch({forum_id: bookmark['forumId']});
-            // const test = fs.readFileSync('file2.html').toString();
             const $ = cheerio.load(grepolis.html, { normalizeWhitespace: true });
-            // const activeBookmarkTitle = $('select[name="forum[forum_id]"] > option[selected="selected"]').text();
             const bookmarkTitle = bookmark['name'];
-            // const activeBookmarkId = $('select[name="forum[forum_id]"] > option[selected="selected"]').attr('value');
             const bookmarkId = bookmark['forumId'];
             const threads = [];
             const postsArray = await $('.title_author_wrapper > .title > a').toArray();
@@ -112,10 +149,12 @@ const grepolis = {
 };
 
 (async () => {
-    await grepolis.fetch({forum_id: 1687}).catch(err => { console.error(err); process.exit(1)});
-    await grepolis.parseBookmarks();
-    console.log(database.bookmarks);
-    await grepolis.parseForumThreads();
-    console.log(JSON.stringify(database.bookmarkThreads, null, 2));
+    await grepolis.initialize();
+    await grepolis.login('', '');
+    // await grepolis.fetch({forum_id: 1687}).catch(err => { console.error(err); process.exit(1)});
+    // await grepolis.parseBookmarks();
+    // console.log(database.bookmarks);
+    // await grepolis.parseForumThreads();
+    // console.log(JSON.stringify(database.bookmarkThreads, null, 2));
 })();
 
