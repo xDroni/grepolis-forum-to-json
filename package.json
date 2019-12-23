@@ -1,7 +1,7 @@
 {
-  "name": "grepo-forum-parser",
+  "name": "grepolis-alliance-forum-to-json",
   "version": "1.0.0",
-  "description": "",
+  "description": "Create json file that contains data from your alliance's forum in grepolis",
   "main": "grepolis.js",
   "scripts": {
     "start": "node grepolis.js"
