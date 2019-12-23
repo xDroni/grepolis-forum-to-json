@@ -4,6 +4,8 @@ const fetch = require('node-fetch');
 const fs = require('fs');
 const prompt = require('prompt-sync')();
 
+const { getArgument } = require('./utils');
+
 const BASE_URL = 'https://pl.grepolis.com/';
 
 const database = {
@@ -16,19 +18,19 @@ const grepolis = {
     browser: null,
     page: null,
     html: null,
-    fetchLink: "https://pl84.grepolis.com/game/alliance_forum?town_id=16422&action=forum&h=2f71ab6273b617319a63c213ad5b781a8de1bbfb",
+    fetchLink: null,
     sid: null,
 
     initialize: async () => {
         grepolis.browser = await puppeteer.launch({
-            headless: false,
+            headless: true,
             executablePath: 'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
         });
 
         grepolis.page = await grepolis.browser.newPage();
     },
 
-    login: async (login, password) => {
+    login: async (login, password, worldNumber) => {
         await grepolis.page.goto(BASE_URL, { waitUntil: 'networkidle2' });
 
         /* Logging in */
@@ -46,7 +48,7 @@ const grepolis = {
             console.log(i + 1, text);
         }
 
-        let choice = -1;
+        let choice = worldNumber;
         while(!(choice >= 1 && choice <= worlds.length-1)) {
             choice = prompt(`Choose the world [1-${worlds.length-1}]: `);
         }
@@ -58,7 +60,18 @@ const grepolis = {
 
         await grepolis.page.waitFor(5000);
 
+        /* Alliance forum click - intercept the request */
         await grepolis.page.waitFor('.button > div[data-subtype="allianceforum"]');
+        await grepolis.page.setRequestInterception(true);
+
+        grepolis.page.on('request', request => {
+            if(request.url().includes('alliance_forum')) {
+                console.log('Saving the url of alliance forum request');
+                grepolis.fetchLink = request._url;
+            }
+            request.abort();
+        });
+
         await grepolis.page.evaluate(() => {document.querySelector('.button > div[data-subtype="allianceforum"]').click()});
         console.log('Opening the alliance forum');
 
@@ -66,18 +79,20 @@ const grepolis = {
         const sidCookie = cookies.find((element) => {
             return element['name'] === 'sid';
         });
+        console.log('Saving the sid cookie');
         grepolis.sid = sidCookie['value'];
-        console.log('grepolis.sid', grepolis.sid);
+
+        grepolis.browser.close();
     },
 
     fetch: async (data) => {
         const res = await fetch(grepolis.fetchLink, {
             "headers": {
-                "cookie": "sid=sogcc8gck8k048cgs4cc84s0wg8gwwgkkkg0ccwg0kww00owkoc0g08kgsks0sg4",
+                "cookie": `sid=${grepolis.sid}`,
                 "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
                 "x-requested-with": "XMLHttpRequest"
             },
-            "body": "json="+JSON.stringify(data),
+            "body": `json=${JSON.stringify(data)}`,
             "method": "POST",
         });
         const json = await res.json();
@@ -90,9 +105,10 @@ const grepolis = {
     },
 
     saveToFile: (filename) => {
-        fs.writeFileSync(filename, grepolis.html, (err) => {
+        console.log('Saving output to file:', filename);
+        fs.writeFileSync(filename, JSON.stringify(database.bookmarkThreads, null, 2), (err) => {
             if(err) console.log(err);
-            else console.log('file saved');
+            else console.log('File saved');
         })
     },
 
@@ -111,6 +127,8 @@ const grepolis = {
     },
 
     parseForumThreads: async () => {
+        ///TODO: Handle pages of threads
+        console.log('Parsing... ');
         for(let bookmark of database.bookmarks) {
             await grepolis.fetch({forum_id: bookmark['forumId']});
             const $ = cheerio.load(grepolis.html, { normalizeWhitespace: true });
@@ -118,6 +136,7 @@ const grepolis = {
             const bookmarkId = bookmark['forumId'];
             const threads = [];
             const postsArray = await $('.title_author_wrapper > .title > a').toArray();
+
             for(let element of postsArray) {
                 const threadTitle = $(element).text();
                 const threadId = $(element).attr('onclick').match('[0-9]+')[0];
@@ -129,11 +148,18 @@ const grepolis = {
                     posts,
                 })
             }
-            database.bookmarkThreads.push({ bookmarkId, bookmarkTitle, threads });
+
+            database.bookmarkThreads.push({
+                bookmarkId,
+                bookmarkTitle,
+                threads
+            });
         }
     },
 
     parseForumPosts: async () => {
+        ///TODO: Handle pages of posts
+        ///TODO: Handle published reports?
         const $ = cheerio.load(grepolis.html, { normalizeWhitespace: true });
         const posts = [];
         await $('.content > p').each((index, element) => {
@@ -142,7 +168,12 @@ const grepolis = {
             const author = $('.author > a').attr('onclick').match('\'(.+)\'')[1];
             let lastEdited = $('.post_functions').text().trim().match('[0-9]+\\.[0-9]+\\.[0-9]+\\ [0-9]+:[0-9]+');
             if(lastEdited !== null) lastEdited = lastEdited[0];
-            posts.push({date, lastEdited, author, postText});
+            posts.push({
+                author,
+                postText,
+                date,
+                lastEdited
+            });
         });
         return posts;
     }
@@ -150,11 +181,14 @@ const grepolis = {
 
 (async () => {
     await grepolis.initialize();
-    await grepolis.login('', '');
-    // await grepolis.fetch({forum_id: 1687}).catch(err => { console.error(err); process.exit(1)});
-    // await grepolis.parseBookmarks();
-    // console.log(database.bookmarks);
-    // await grepolis.parseForumThreads();
-    // console.log(JSON.stringify(database.bookmarkThreads, null, 2));
+    await grepolis.login(
+        getArgument('login'),
+        getArgument('password'),
+        getArgument('world'),
+    );
+    await grepolis.fetch({}).catch(err => { console.error(err); process.exit(1)});
+    await grepolis.parseBookmarks();
+    await grepolis.parseForumThreads();
+    await grepolis.saveToFile('./output.json');
 })();
 
