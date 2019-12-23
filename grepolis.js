@@ -125,11 +125,10 @@ const grepolis = {
 
     parseBookmarks: async (data) => {
         const bookmarks = [];
-        for(let {forumId, name} of data) {
-            bookmarks.push({
-                forumId,
-                name,
-            })
+        for(let bookmark of data) {
+            bookmarks.push(
+                bookmark,
+            )
         }
 
         database.bookmarks = bookmarks;
