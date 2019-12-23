@@ -105,11 +105,8 @@ const grepolis = {
     },
 
     saveToFile: (filename) => {
-        console.log('Saving output to file:', filename);
-        fs.writeFileSync(filename, JSON.stringify(database.bookmarkThreads, null, 2), (err) => {
-            if(err) console.log(err);
-            else console.log('File saved');
-        })
+        fs.writeFileSync(filename, JSON.stringify(database.bookmarkThreads, null, 2));
+        console.log('Saved output to file:', filename);
     },
 
     parseBookmarks: async () => {
@@ -162,11 +159,11 @@ const grepolis = {
         ///TODO: Handle published reports?
         const $ = cheerio.load(grepolis.html, { normalizeWhitespace: true });
         const posts = [];
-        await $('.content > p').each((index, element) => {
-            const postText = $(element).text().trim();
-            const date = $('.author').text().trim().match('[0-9]+\\.[0-9]+\\.[0-9]+\\ [0-9]+:[0-9]+')[0];
-            const author = $('.author > a').attr('onclick').match('\'(.+)\'')[1];
-            let lastEdited = $('.post_functions').text().trim().match('[0-9]+\\.[0-9]+\\.[0-9]+\\ [0-9]+:[0-9]+');
+        await $('#forum > ul > li').each((index, element) => {
+            const postText = $(element).find('.post > .content > p').text().trim();
+            const date = $(element).find('.post > .author').text().trim().match('[0-9]+\\.[0-9]+\\.[0-9]+\\ [0-9]+:[0-9]+')[0];
+            const author = $(element).find('.post > .author > a').attr('onclick').match('\'(.+)\'')[1];
+            let lastEdited = $(element).find('.post > .post_functions').text().trim().match('[0-9]+\\.[0-9]+\\.[0-9]+\\ [0-9]+:[0-9]+');
             if(lastEdited !== null) lastEdited = lastEdited[0];
             posts.push({
                 author,
