@@ -124,27 +124,33 @@ const grepolis = {
     },
 
     parseForumThreads: async () => {
-        ///TODO: Handle pages of threads
         console.log('Parsing... ');
         for(let bookmark of database.bookmarks) {
-            await grepolis.fetch({forum_id: bookmark['forumId']});
-            const $ = cheerio.load(grepolis.html, { normalizeWhitespace: true });
+            let page = 1;
+            let threadPages = null;
             const bookmarkTitle = bookmark['name'];
             const bookmarkId = bookmark['forumId'];
             const threads = [];
-            const postsArray = await $('.title_author_wrapper > .title > a').toArray();
+            do {
+                await grepolis.fetch({ forum_id: bookmark['forumId'], page: page });
+                const $ = cheerio.load(grepolis.html, { normalizeWhitespace: true });
+                threadPages = $('.forum_pager > .paginator_bg').length;
+                const postsArray = await $('.title_author_wrapper > .title > a').toArray();
 
-            for(let element of postsArray) {
-                const threadTitle = $(element).text();
-                const threadId = $(element).attr('onclick').match('[0-9]+')[0];
-                await grepolis.fetch({thread_id: threadId});
-                const posts = await grepolis.parseForumPosts();
-                threads.push({
-                    threadId,
-                    threadTitle,
-                    posts,
-                })
-            }
+                for(let element of postsArray) {
+                    const threadTitle = $(element).text();
+                    const threadId = $(element).attr('onclick').match('[0-9]+')[0];
+                    await grepolis.fetch({thread_id: threadId});
+                    const posts = await grepolis.parseForumPosts();
+                    threads.push({
+                        threadId,
+                        threadTitle,
+                        posts,
+                        page,
+                    })
+                }
+                page++;
+            } while(page === threadPages);
 
             database.bookmarkThreads.push({
                 bookmarkId,
