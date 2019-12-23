@@ -85,7 +85,7 @@ const grepolis = {
         grepolis.browser.close();
     },
 
-    fetch: async (data) => {
+    fetch: async data => {
         const res = await fetch(grepolis.fetchLink, {
             "headers": {
                 "cookie": `sid=${grepolis.sid}`,
@@ -126,31 +126,30 @@ const grepolis = {
     parseForumThreads: async () => {
         console.log('Parsing... ');
         for(let bookmark of database.bookmarks) {
-            let page = 1;
-            let threadPages = null;
+            let threadPage = 1;
+            let threadPagesCount = null;
             const bookmarkTitle = bookmark['name'];
             const bookmarkId = bookmark['forumId'];
             const threads = [];
             do {
-                await grepolis.fetch({ forum_id: bookmark['forumId'], page: page });
+                await grepolis.fetch({ forum_id: bookmark['forumId'], page: threadPage });
                 const $ = cheerio.load(grepolis.html, { normalizeWhitespace: true });
-                threadPages = $('.forum_pager > .paginator_bg').length;
+                threadPagesCount = $('.forum_pager > .paginator_bg').length;
                 const postsArray = await $('.title_author_wrapper > .title > a').toArray();
 
                 for(let element of postsArray) {
                     const threadTitle = $(element).text();
-                    const threadId = $(element).attr('onclick').match('[0-9]+')[0];
-                    await grepolis.fetch({thread_id: threadId});
-                    const posts = await grepolis.parseForumPosts();
+                    const thread_id = $(element).attr('onclick').match('[0-9]+')[0];
+                    const posts = await grepolis.parseForumPosts(thread_id);
                     threads.push({
-                        threadId,
+                        threadId: thread_id,
                         threadTitle,
                         posts,
-                        page,
+                        threadPage,
                     })
                 }
-                page++;
-            } while(page === threadPages);
+                threadPage++;
+            } while(threadPage <= threadPagesCount);
 
             database.bookmarkThreads.push({
                 bookmarkId,
@@ -160,24 +159,32 @@ const grepolis = {
         }
     },
 
-    parseForumPosts: async () => {
-        ///TODO: Handle pages of posts
+    parseForumPosts: async thread_id => {
         ///TODO: Handle published reports?
-        const $ = cheerio.load(grepolis.html, { normalizeWhitespace: true });
+        let postPage = 1;
+        let postPagesCount = null;
         const posts = [];
-        await $('#forum > ul > li').each((index, element) => {
-            const postText = $(element).find('.post > .content > p').text().trim();
-            const date = $(element).find('.post > .author').text().trim().match('[0-9]+\\.[0-9]+\\.[0-9]+\\ [0-9]+:[0-9]+')[0];
-            const author = $(element).find('.post > .author > a').attr('onclick').match('\'(.+)\'')[1];
-            let lastEdited = $(element).find('.post > .post_functions').text().trim().match('[0-9]+\\.[0-9]+\\.[0-9]+\\ [0-9]+:[0-9]+');
-            if(lastEdited !== null) lastEdited = lastEdited[0];
-            posts.push({
-                author,
-                postText,
-                date,
-                lastEdited
+        do {
+            await grepolis.fetch({ thread_id, page: postPage });
+            const $ = cheerio.load(grepolis.html, { normalizeWhitespace: true });
+            postPagesCount = $('.forum_pager > .paginator_bg').length;
+            await $('#forum > ul > li').each((index, element) => {
+                const postText = $(element).find('.post > .content > p').text().trim();
+                const date = $(element).find('.post > .author').text().trim().match('[0-9]+\\.[0-9]+\\.[0-9]+\\ [0-9]+:[0-9]+')[0];
+                const author = $(element).find('.post > .author > a').attr('onclick').match('\'(.+)\'')[1];
+                let lastEdited = $(element).find('.post > .post_functions').text().trim().match('[0-9]+\\.[0-9]+\\.[0-9]+\\ [0-9]+:[0-9]+');
+                if(lastEdited !== null) lastEdited = lastEdited[0];
+                posts.push({
+                    author,
+                    postText,
+                    date,
+                    lastEdited,
+                    postPage,
+                });
             });
-        });
+            postPage++;
+        } while(postPage <= postPagesCount);
+
         return posts;
     }
 };
