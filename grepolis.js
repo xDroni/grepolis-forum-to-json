@@ -23,8 +23,8 @@ const grepolis = {
 
     initialize: async () => {
         grepolis.browser = await puppeteer.launch({
-            headless: true,
-            executablePath: 'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+            // headless: false,
+            executablePath: 'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe', ///TODO: change hardcoded path
         });
 
         grepolis.page = await grepolis.browser.newPage();
@@ -64,16 +64,15 @@ const grepolis = {
         await grepolis.page.waitFor('.button > div[data-subtype="allianceforum"]');
         await grepolis.page.setRequestInterception(true);
 
-        grepolis.page.on('request', request => {
+        await grepolis.page.on('request', async request => {
             if(request.url().includes('alliance_forum')) {
-                console.log('Saving the url of alliance forum request');
+                console.log('Saving the url of alliance_forum request');
                 grepolis.fetchLink = request._url;
             }
-            request.abort();
+            request.continue();
         });
 
         await grepolis.page.evaluate(() => {document.querySelector('.button > div[data-subtype="allianceforum"]').click()});
-        console.log('Opening the alliance forum');
 
         const cookies = await grepolis.page.cookies();
         const sidCookie = cookies.find((element) => {
@@ -81,6 +80,21 @@ const grepolis = {
         });
         console.log('Saving the sid cookie');
         grepolis.sid = sidCookie['value'];
+
+        /* Fetching bookmarks */
+        await grepolis.page.waitFor('.submenu_link');
+        const bookmarkNames = await grepolis.page.$$('.submenu_link');
+        const forumData = [];
+        for(let i=bookmarkNames.length-1; i>=0; i--) {
+            const forumId = bookmarkNames[i]._remoteObject.description.match(/\d+/)[0];
+            const name = await grepolis.page.evaluate(element => element.textContent, bookmarkNames[i]);
+            forumData.push({
+                forumId,
+                name,
+            })
+        }
+
+        await grepolis.parseBookmarks(forumData);
 
         grepolis.browser.close();
     },
@@ -109,17 +123,15 @@ const grepolis = {
         console.log('Saved output to file:', filename);
     },
 
-    parseBookmarks: async () => {
-        const $ = cheerio.load(grepolis.html, { normalizeWhitespace: true });
+    parseBookmarks: async (data) => {
         const bookmarks = [];
-        await $('select[name="forum[forum_id]"] > option').each((index, element) => {
-            const forumId = $(element).attr('value');
-            const name = $(element).text();
+        for(let {forumId, name} of data) {
             bookmarks.push({
                 forumId,
                 name,
             })
-        });
+        }
+
         database.bookmarks = bookmarks;
     },
 
@@ -197,7 +209,6 @@ const grepolis = {
         getArgument('world'),
     );
     await grepolis.fetch({}).catch(err => { console.error(err); process.exit(1)});
-    await grepolis.parseBookmarks();
     await grepolis.parseForumThreads();
     await grepolis.saveToFile('./output.json');
 })();
