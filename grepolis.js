@@ -34,14 +34,41 @@ const grepolis = {
         await grepolis.page.goto(BASE_URL, { waitUntil: 'networkidle2' });
 
         /* Logging in */
-        await grepolis.page.waitFor('input[id="login_userid"]');
-        await grepolis.page.type('input[id="login_userid"]', login, { delay: 50 });
-        await grepolis.page.type('input[id="login_password"]', password, { delay: 50 });
-        await grepolis.page.keyboard.press('Enter');
-        console.log('Logging in...');
+        let loginError;
+        let secondAttempt = false;
+        do {
+            if(secondAttempt) {
+                login = prompt('Login: ');
+                password = prompt('Password: ');
+            }
+
+            const loginInput = (await grepolis.page.waitFor('input[id="login_userid"]')).asElement();
+            await grepolis.page.evaluate(element => element.value = '', loginInput);
+            await loginInput.type(login);
+
+            const passwordInput = await grepolis.page.$('input[id="login_password"]');
+            await grepolis.page.evaluate(element => element.value = '', passwordInput);
+            await passwordInput.type(password);
+
+            await grepolis.page.keyboard.press('Enter');
+            console.log('Logging in...');
+
+            await grepolis.page.waitFor(2000);
+
+            loginError = await grepolis.page.$('.validation-message-error > span');
+            if(loginError !== null) {
+                const text = await grepolis.page.evaluate(element => element.textContent, loginError);
+                console.error('Login error');
+                console.error(text);
+                if(!secondAttempt) {
+                    secondAttempt = true;
+                }
+            }
+        } while(loginError !== null);
 
         /* Selecting the world */
         await grepolis.page.waitFor('a[class="logout_button"]');
+        console.log('Logged in successfully');
         const worlds = await grepolis.page.$$('div[id="worlds"] > div > ul > li');
         for(let i=0; i<worlds.length-1; i++) {
             const text = await grepolis.page.evaluate(element => element.textContent, worlds[i]);
